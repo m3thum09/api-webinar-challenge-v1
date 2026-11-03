@@ -1,0 +1,41 @@
+name: Evaluate Submission Issue
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  evaluate:
+    if: contains(github.event.issue.labels.*.name, 'submission')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Submission Data
+        id: parse
+        run: |
+          BODY="${{ github.event.issue.body }}"
+          TEAM=$(echo "$BODY" | grep -A 2 "Team Number" | tail -n 1 | xargs)
+          USER=$(echo "$BODY" | grep -A 2 "Docker Hub Username" | tail -n 1 | xargs)
+          echo "team=$TEAM" >> $GITHUB_OUTPUT
+          echo "docker_user=$USER" >> $GITHUB_OUTPUT
+
+      - name: Run Test Script
+        run: |
+          chmod +x ./eval.sh
+          ./eval.sh ${{ steps.parse.outputs.team }} ${{ steps.parse.outputs.docker_user }}
+
+      - name: Comment Success
+        if: success()
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: "QUALIFIED: Your solution passed all health checks!"
+
+      - name: Comment Failure
+        if: failure()
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: "FAILED: Images were missing on Docker Hub or health checks failed. Please check your workflow logs and resubmit."
